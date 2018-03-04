@@ -75,7 +75,6 @@ namespace FileDublicates
                             listsOfSLFiles[i.Length].Add(fileInfo.Name);
                             AddToCashAsync(i.Name);
                             AddToCashAsync(fileInfo.Name);
-                            int r = Cash.Count;
                         }
                     }
                 }
@@ -103,6 +102,7 @@ namespace FileDublicates
 
             for (int i = 0; i < numberOfThreads; i++)
             {
+                // could use thread pool
                 new Thread(() => threadTask(fileNames)).Start();
             }
             waitEnd.WaitOne();
@@ -151,9 +151,8 @@ namespace FileDublicates
                     return;
                 }
             }
-            //compareFromCash(fileNames[localCount.Value], fileNames[localCount.Value + localIndex.Value]);
+            compareFromCash(fileNames[localCount.Value], fileNames[localCount.Value + localIndex.Value]);
             Console.WriteLine(fileNames[count] + fileNames[count + index]);
-
             threadTask(fileNames);
         }
 
