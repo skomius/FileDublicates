@@ -16,9 +16,9 @@ namespace FileDublicates
         static readonly object cashLocker = new object();
         static readonly object dataLocker = new object();
         static readonly object cLogicLocker = new object();
-        static readonly object debugLocker = new object();
 
         static AutoResetEvent NewData = new AutoResetEvent(false);
+        static AutoResetEvent DataSet = new AutoResetEvent(false);
         static AutoResetEvent waitEnd = new AutoResetEvent(false);
 
         static Dictionary<string, byte[]> Cash = new Dictionary<string, byte[]>();
@@ -26,13 +26,8 @@ namespace FileDublicates
         static string fileNames;
 
         static List<string> debug = new List<string>();
-
-        static ThreadLocal<int> localCount = new ThreadLocal<int>(() => { return 0; });
-        static ThreadLocal<int> localIndex = new ThreadLocal<int>(() => { return 0; });
-
-        static ContextObject context;
-
-        static int numberOfThreads = 1;
+        
+        static int numberOfThreads = 4;
 
         static void Main(string[] args)
         {
@@ -83,6 +78,8 @@ namespace FileDublicates
             return listsOfSLFiles;
         }
 
+
+        //crawler class
         static void Crawler(Dictionary<long, List<string>> listsOfSLFiles)
         {
             foreach (KeyValuePair<long, List<string>> listOfSLFile in listsOfSLFiles)
@@ -94,7 +91,7 @@ namespace FileDublicates
 
         static void crawl(List<string> fileNames)
         {
-            context = new ContextObject(fileNames.Count, fileNames.Count, 0, numberOfThreads);
+            ContextObject context = new ContextObject(fileNames.Count, fileNames.Count, 0, numberOfThreads);
 
             if (context.Count < numberOfThreads)
                 context.NumberOfThreads = fileNames.Count;
@@ -103,12 +100,12 @@ namespace FileDublicates
             for (int i = 0; i < numberOfThreads; i++)
             {
                 // could use thread pool
-                new Thread(() => threadTask(fileNames)).Start();
+                new Thread(() => threadTask(fileNames, context)).Start();
             }
             waitEnd.WaitOne();
         }
 
-        static void threadTask(List<string> fileNames)
+        static void threadTask(List<string> fileNames, ContextObject context)
         {
             // index ir count turi perduoti turi perduoti reiksmes nuo context.iteration ir context.count
             int count = 0;
@@ -124,6 +121,7 @@ namespace FileDublicates
                         {
                             context.Iteration++;
                             index = context.Iteration - context.Length + context.Count;
+                            count = context.Length - context.Count;
                         }
                         else
                         {
@@ -151,9 +149,9 @@ namespace FileDublicates
                     return;
                 }
             }
-            compareFromCash(fileNames[localCount.Value], fileNames[localCount.Value + localIndex.Value]);
+            compareFromCash(fileNames[count], fileNames[count + index]);
             Console.WriteLine(fileNames[count] + fileNames[count + index]);
-            threadTask(fileNames);
+            threadTask(fileNames, context);
         }
 
 
@@ -196,6 +194,7 @@ namespace FileDublicates
                 UpdateFileNames(fileName1 + '\n' + fileName2);
         }
 
+        // Worker writer class 
         static async void WriteToFileAsync()
         {
             FileStream fileStream = File.Open("data.txt", FileMode.Append);
@@ -205,25 +204,22 @@ namespace FileDublicates
 
             while (true)
             {
-                NewData.WaitOne();
-                lock (dataLocker)
-                {
+                NewData.Set();
+                DataSet.WaitOne();
                     if (fileNames != null)
                         newOne = string.Copy(fileNames);
-                }
                 await textWriter.WriteLineAsync(newOne);
             }
         }
 
         static void UpdateFileNames(string newOne)
         {
-            lock (dataLocker)
-            {
+            NewData.WaitOne();
                 fileNames = newOne;
-            }
-            NewData.Set();
+            DataSet.Set();
         }
 
+        // cash class
         static async void AddToCashAsync(string fileName)
         {
             byte[] fileBytes;
